@@ -43,11 +43,11 @@ use React\EventLoop\Loop;
 
 use Exception;
 
-$version = '4.4.13';
+$version = '4.4.16';
 
 class Exchange extends \ccxt\Exchange {
 
-    const VERSION = '4.4.13';
+    const VERSION = '4.4.16';
 
     public $browser;
     public $marketsLoading = null;
@@ -181,11 +181,22 @@ class Exchange extends \ccxt\Exchange {
             $raw_header_keys = array_keys($raw_response_headers);
             $response_headers = array();
             foreach ($raw_header_keys as $header) {
-                $response_headers[$header] = $result->getHeaderLine($header);
+                $response_headers[strtolower($header)] = $result->getHeaderLine($header);
             }
             $http_status_code = $result->getStatusCode();
             $http_status_text = $result->getReasonPhrase();
             $response_body = strval($result->getBody());
+
+            if (array_key_exists('content-encoding', $response_headers) && $response_headers['content-encoding'] !== null) {
+                if (preg_match('~[^\x20-\x7E\t\r\n]~', $response_body) > 0) { // only decompress if the message is a binary
+                    $contentEncoding = $response_headers['content-encoding'];
+                    if (strpos($contentEncoding, 'gzip') >= 0) {
+                        $response_body = \ccxt\pro\gunzip($response_body);
+                    } else if (strpos($contentEncoding, 'deflate') >= 0) {
+                        $response_body = \ccxt\pro\inflate($response_body);
+                    }
+                }
+            }
 
             $response_body = $this->on_rest_response($http_status_code, $http_status_text, $url, $method, $response_headers, $response_body, $headers, $body);
 
@@ -1166,6 +1177,21 @@ class Exchange extends \ccxt\Exchange {
 
     public function fetch_trading_limits(?array $symbols = null, $params = array ()) {
         throw new NotSupported($this->id . ' fetchTradingLimits() is not supported yet');
+    }
+
+    public function parse_currency(array $rawCurrency) {
+        throw new NotSupported($this->id . ' parseCurrency() is not supported yet');
+    }
+
+    public function parse_currencies($rawCurrencies) {
+        $result = array();
+        $arr = $this->to_array($rawCurrencies);
+        for ($i = 0; $i < count($arr); $i++) {
+            $parsed = $this->parse_currency($arr[$i]);
+            $code = $parsed['code'];
+            $result[$code] = $parsed;
+        }
+        return $result;
     }
 
     public function parse_market(array $market) {
@@ -4912,7 +4938,7 @@ class Exchange extends \ccxt\Exchange {
             $result = $this->filter_by_array($result, 'currency', $codes, false);
         }
         if ($indexed) {
-            return $this->index_by($result, 'currency');
+            $result = $this->filter_by_array($result, 'currency', null, $indexed);
         }
         return $result;
     }

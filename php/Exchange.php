@@ -43,7 +43,7 @@ use BN\BN;
 use Sop\ASN1\Type\UnspecifiedType;
 use Exception;
 
-$version = '4.4.13';
+$version = '4.4.16';
 
 // rounding mode
 const TRUNCATE = 0;
@@ -62,7 +62,7 @@ const PAD_WITH_ZERO = 6;
 
 class Exchange {
 
-    const VERSION = '4.4.13';
+    const VERSION = '4.4.16';
 
     private static $base58_alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     private static $base58_encoder = null;
@@ -3072,6 +3072,21 @@ class Exchange {
 
     public function fetch_trading_limits(?array $symbols = null, $params = array ()) {
         throw new NotSupported($this->id . ' fetchTradingLimits() is not supported yet');
+    }
+
+    public function parse_currency(array $rawCurrency) {
+        throw new NotSupported($this->id . ' parseCurrency() is not supported yet');
+    }
+
+    public function parse_currencies($rawCurrencies) {
+        $result = array();
+        $arr = $this->to_array($rawCurrencies);
+        for ($i = 0; $i < count($arr); $i++) {
+            $parsed = $this->parse_currency($arr[$i]);
+            $code = $parsed['code'];
+            $result[$code] = $parsed;
+        }
+        return $result;
     }
 
     public function parse_market(array $market) {
@@ -6674,7 +6689,7 @@ class Exchange {
             $result = $this->filter_by_array($result, 'currency', $codes, false);
         }
         if ($indexed) {
-            return $this->index_by($result, 'currency');
+            $result = $this->filter_by_array($result, 'currency', null, $indexed);
         }
         return $result;
     }
