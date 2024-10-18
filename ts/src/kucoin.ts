@@ -166,6 +166,7 @@ export default class kucoin extends Exchange {
                         'mark-price/{symbol}/current': 3, // 2PW
                         'mark-price/all-symbols': 3,
                         'margin/config': 25, // 25SW
+                        'announcements': 20, // 20W
                     },
                     'post': {
                         // ws
@@ -655,6 +656,7 @@ export default class kucoin extends Exchange {
                             'currencies/{currency}': 'v3',
                             'symbols': 'v2',
                             'mark-price/all-symbols': 'v3',
+                            'announcements': 'v3',
                         },
                     },
                     'private': {
@@ -3089,7 +3091,7 @@ export default class kucoin extends Exchange {
             },
             'status': status,
             'lastTradeTimestamp': undefined,
-            'average': undefined,
+            'average': this.safeString (order, 'avgDealPrice'),
             'trades': undefined,
         }, market);
     }
@@ -4425,17 +4427,6 @@ export default class kucoin extends Exchange {
             return config['v1'];
         }
         return this.safeValue (config, 'cost', 1);
-    }
-
-    parseBorrowRateHistory (response, code, since, limit) {
-        const result = [];
-        for (let i = 0; i < response.length; i++) {
-            const item = response[i];
-            const borrowRate = this.parseBorrowRate (item);
-            result.push (borrowRate);
-        }
-        const sorted = this.sortBy (result, 'timestamp');
-        return this.filterByCurrencySinceLimit (sorted, code, since, limit);
     }
 
     parseBorrowRate (info, currency: Currency = undefined) {
