@@ -461,7 +461,10 @@ public partial class bitmart : Exchange
                     { "40049", typeof(InvalidOrder) },
                     { "40050", typeof(InvalidOrder) },
                 } },
-                { "broad", new Dictionary<string, object>() {} },
+                { "broad", new Dictionary<string, object>() {
+                    { "You contract account available balance not enough", typeof(InsufficientFunds) },
+                    { "you contract account available balance not enough", typeof(InsufficientFunds) },
+                } },
             } },
             { "commonCurrencies", new Dictionary<string, object>() {
                 { "$GM", "GOLDMINER" },
@@ -623,17 +626,20 @@ public partial class bitmart : Exchange
                         { "limit", 200 },
                         { "daysBack", null },
                         { "untilDays", 99999 },
+                        { "symbolRequired", false },
                     } },
                     { "fetchOrder", new Dictionary<string, object>() {
                         { "marginMode", false },
                         { "trigger", false },
                         { "trailing", false },
+                        { "symbolRequired", false },
                     } },
                     { "fetchOpenOrders", new Dictionary<string, object>() {
                         { "marginMode", true },
                         { "limit", 200 },
                         { "trigger", false },
                         { "trailing", false },
+                        { "symbolRequired", false },
                     } },
                     { "fetchOrders", null },
                     { "fetchClosedOrders", new Dictionary<string, object>() {
@@ -644,6 +650,7 @@ public partial class bitmart : Exchange
                         { "untilDays", null },
                         { "trigger", false },
                         { "trailing", false },
+                        { "symbolRequired", false },
                     } },
                     { "fetchOHLCV", new Dictionary<string, object>() {
                         { "limit", 1000 },
@@ -874,7 +881,7 @@ public partial class bitmart : Exchange
             object minSellCost = this.safeString(market, "min_sell_amount");
             object minCost = Precise.stringMax(minBuyCost, minSellCost);
             object baseMinSize = this.safeNumber(market, "base_min_size");
-            ((IList<object>)result).Add(new Dictionary<string, object>() {
+            ((IList<object>)result).Add(this.safeMarketStructure(new Dictionary<string, object>() {
                 { "id", id },
                 { "numericId", numericId },
                 { "symbol", symbol },
@@ -923,7 +930,7 @@ public partial class bitmart : Exchange
                 } },
                 { "created", null },
                 { "info", market },
-            });
+            }));
         }
         return result;
     }
@@ -993,7 +1000,7 @@ public partial class bitmart : Exchange
             {
                 expiry = null;
             }
-            ((IList<object>)result).Add(new Dictionary<string, object>() {
+            ((IList<object>)result).Add(this.safeMarketStructure(new Dictionary<string, object>() {
                 { "id", id },
                 { "numericId", null },
                 { "symbol", symbol },
@@ -1042,7 +1049,7 @@ public partial class bitmart : Exchange
                 } },
                 { "created", this.safeInteger(market, "open_timestamp") },
                 { "info", market },
-            });
+            }));
         }
         return result;
     }
@@ -3662,8 +3669,9 @@ public partial class bitmart : Exchange
         parameters ??= new Dictionary<string, object>();
         await this.loadMarkets();
         object currency = this.currency(code);
+        object currencyId = getValue(currency, "id");
         object request = new Dictionary<string, object>() {
-            { "currency", getValue(currency, "id") },
+            { "currency", currencyId },
         };
         if (isTrue(isEqual(code, "USDT")))
         {
@@ -3674,8 +3682,18 @@ public partial class bitmart : Exchange
             networkInner = this.safeString(networks, networkInner, networkInner); // handle ERC20>ETH alias
             if (isTrue(!isEqual(networkInner, null)))
             {
-                ((IDictionary<string,object>)request)["currency"] = add(add(getValue(request, "currency"), "-"), networkInner); // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
+                ((IDictionary<string,object>)request)["currency"] = add(add(currencyId, "-"), networkInner); // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
                 parameters = this.omit(parameters, "network");
+            }
+        } else
+        {
+            object networkCode = null;
+            var networkCodeparametersVariable = this.handleNetworkCodeAndParams(parameters);
+            networkCode = ((IList<object>)networkCodeparametersVariable)[0];
+            parameters = ((IList<object>)networkCodeparametersVariable)[1];
+            if (isTrue(!isEqual(networkCode, null)))
+            {
+                ((IDictionary<string,object>)request)["currency"] = add(add(currencyId, "-"), this.networkCodeToId(networkCode));
             }
         }
         object response = await this.privateGetAccountV1DepositAddress(this.extend(request, parameters));
@@ -3825,7 +3843,7 @@ public partial class bitmart : Exchange
             network = this.safeString(networks, network, network); // handle ERC20>ETH alias
             if (isTrue(!isEqual(network, null)))
             {
-                ((IDictionary<string,object>)request)["currency"] = add(((IDictionary<string,object>)request)["currency"], add("-", network)); // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
+                ((IDictionary<string,object>)request)["currency"] = add(add(getValue(request, "currency"), "-"), network); // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
                 ((IDictionary<string,object>)currency)["code"] = getValue(request, "currency"); // update currency code to filter
                 parameters = this.omit(parameters, "network");
             }
@@ -4792,7 +4810,7 @@ public partial class bitmart : Exchange
      * @description fetches historical funding rate prices
      * @see https://developer-pro.bitmart.com/en/futuresv2/#get-funding-rate-history
      * @param {string} symbol unified symbol of the market to fetch the funding rate history for
-     * @param {int} [since] timestamp in ms of the earliest funding rate to fetch
+     * @param {int} [since] not sent to exchange api, exchange api always returns the most recent data, only used to filter exchange response
      * @param {int} [limit] the maximum amount of funding rate structures to fetch
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object[]} a list of [funding rate structures]{@link https://docs.ccxt.com/#/?id=funding-rate-history-structure}
@@ -5581,6 +5599,7 @@ public partial class bitmart : Exchange
         //     {"message":"Bad Request [from is empty]","code":50000,"trace":"579986f7-c93a-4559-926b-06ba9fa79d76","data":{}}
         //     {"message":"Kline size over 500","code":50004,"trace":"d625caa8-e8ca-4bd2-b77c-958776965819","data":{}}
         //     {"message":"Balance not enough","code":50020,"trace":"7c709d6a-3292-462c-98c5-32362540aeef","data":{}}
+        //     {"code":40012,"message":"You contract account available balance not enough.","trace":"..."}
         //
         // contract
         //
@@ -5593,10 +5612,10 @@ public partial class bitmart : Exchange
         if (isTrue(isTrue(isErrorCode) || isTrue(isErrorMessage)))
         {
             object feedback = add(add(this.id, " "), body);
-            this.throwExactlyMatchedException(getValue(this.exceptions, "exact"), errorCode, feedback);
-            this.throwBroadlyMatchedException(getValue(this.exceptions, "broad"), errorCode, feedback);
             this.throwExactlyMatchedException(getValue(this.exceptions, "exact"), message, feedback);
             this.throwBroadlyMatchedException(getValue(this.exceptions, "broad"), message, feedback);
+            this.throwExactlyMatchedException(getValue(this.exceptions, "exact"), errorCode, feedback);
+            this.throwBroadlyMatchedException(getValue(this.exceptions, "broad"), errorCode, feedback);
             throw new ExchangeError ((string)feedback) ;
         }
         return null;

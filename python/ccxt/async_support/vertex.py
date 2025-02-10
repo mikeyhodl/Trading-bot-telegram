@@ -330,6 +330,72 @@ class vertex(Exchange, ImplicitAPI):
                 'timeDifference': 0,  # the difference between system clock and exchange server clock
                 'brokerId': 5930043274845996,
             },
+            'features': {
+                'default': {
+                    'sandbox': True,
+                    'createOrder': {
+                        'marginMode': False,
+                        'triggerPrice': True,  # todo
+                        'triggerDirection': False,
+                        'triggerPriceType': None,
+                        'stopLossPrice': True,  # todo
+                        'takeProfitPrice': True,  # todo
+                        'attachedStopLossTakeProfit': None,
+                        'timeInForce': {
+                            'IOC': False,
+                            'FOK': False,
+                            'PO': True,
+                            'GTD': True,
+                        },
+                        'hedged': False,
+                        'trailing': False,
+                        'leverage': False,
+                        'marketBuyByCost': True,  # todo
+                        'marketBuyRequiresPrice': True,  # todo fix implementation
+                        'selfTradePrevention': False,
+                        'iceberg': False,
+                    },
+                    'createOrders': None,
+                    'fetchMyTrades': {
+                        'marginMode': False,
+                        'limit': 500,
+                        'daysBack': 100000,  # todo
+                        'untilDays': None,
+                        'symbolRequired': False,
+                    },
+                    'fetchOrder': {
+                        'marginMode': False,
+                        'trigger': False,
+                        'trailing': False,
+                        'symbolRequired': True,
+                    },
+                    'fetchOpenOrders': {
+                        'marginMode': False,
+                        'limit': 500,
+                        'trigger': True,
+                        'trailing': False,
+                        'symbolRequired': False,
+                    },
+                    'fetchOrders': None,  # todo, only for trigger
+                    'fetchClosedOrders': None,  # todo through fetchOrders
+                    'fetchOHLCV': {
+                        'limit': 1000,
+                    },
+                },
+                'spot': {
+                    'extends': 'default',
+                },
+                'swap': {
+                    'linear': {
+                        'extends': 'default',
+                    },
+                    'inverse': None,
+                },
+                'future': {
+                    'linear': None,
+                    'inverse': None,
+                },
+            },
         })
 
     def set_sandbox_mode(self, enabled):
@@ -1457,7 +1523,7 @@ class vertex(Exchange, ImplicitAPI):
         marketId = base + '/' + quote
         if base.find('PERP') > 0:
             marketId = marketId.replace('-PERP', '') + ':USDC'
-        market = self.market(marketId)
+        market = self.safe_market(marketId, market)
         last = self.safe_string(ticker, 'last_price')
         return self.safe_ticker({
             'symbol': market['symbol'],
@@ -2331,14 +2397,15 @@ class vertex(Exchange, ImplicitAPI):
             'digests': ids,
             'nonce': nonce,
         }
+        productIds = cancels['productIds']
         marketIdNum = self.parse_to_numeric(marketId)
         for i in range(0, len(ids)):
-            cancels['productIds'].append(marketIdNum)
+            productIds.append(marketIdNum)
         request = {
             'cancel_orders': {
                 'tx': {
                     'sender': cancels['sender'],
-                    'productIds': cancels['productIds'],
+                    'productIds': productIds,
                     'digests': cancels['digests'],
                     'nonce': self.number_to_string(cancels['nonce']),
                 },

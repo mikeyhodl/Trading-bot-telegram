@@ -203,7 +203,7 @@ class hyperliquid(Exchange, ImplicitAPI):
                 'broad': {
                     'Price must be divisible by tick size.': InvalidOrder,
                     'Order must have minimum value of $10': InvalidOrder,
-                    'Insufficient margin to place order.': InvalidOrder,
+                    'Insufficient margin to place order.': InsufficientFunds,
                     'Reduce only order would increase position.': InvalidOrder,
                     'Post only order would have immediately matched,': InvalidOrder,
                     'Order could not immediately match against any resting orders.': InvalidOrder,
@@ -261,17 +261,20 @@ class hyperliquid(Exchange, ImplicitAPI):
                         'limit': 2000,
                         'daysBack': None,
                         'untilDays': None,
+                        'symbolRequired': True,
                     },
                     'fetchOrder': {
                         'marginMode': False,
                         'trigger': False,
                         'trailing': False,
+                        'symbolRequired': True,
                     },
                     'fetchOpenOrders': {
                         'marginMode': False,
                         'limit': 2000,
                         'trigger': False,
                         'trailing': False,
+                        'symbolRequired': True,
                     },
                     'fetchOrders': {
                         'marginMode': False,
@@ -280,6 +283,7 @@ class hyperliquid(Exchange, ImplicitAPI):
                         'untilDays': None,
                         'trigger': False,
                         'trailing': False,
+                        'symbolRequired': True,
                     },
                     'fetchClosedOrders': {
                         'marginMode': False,
@@ -289,6 +293,7 @@ class hyperliquid(Exchange, ImplicitAPI):
                         'untilDays': None,
                         'trigger': False,
                         'trailing': False,
+                        'symbolRequired': True,
                     },
                     'fetchOHLCV': {
                         'limit': 5000,
@@ -596,7 +601,9 @@ class hyperliquid(Exchange, ImplicitAPI):
             amountPrecisionStr = self.safe_string(innerBaseTokenInfo, 'szDecimals')
             amountPrecision = int(amountPrecisionStr)
             price = self.safe_number(extraData, 'midPx')
-            pricePrecision = self.calculate_price_precision(price, amountPrecision, 8)
+            pricePrecision = 0
+            if price is not None:
+                pricePrecision = self.calculate_price_precision(price, amountPrecision, 8)
             pricePrecisionStr = self.number_to_string(pricePrecision)
             # quotePrecision = self.parse_number(self.parse_precision(self.safe_string(innerQuoteTokenInfo, 'szDecimals')))
             baseId = self.number_to_string(index + 10000)
@@ -693,7 +700,9 @@ class hyperliquid(Exchange, ImplicitAPI):
         amountPrecisionStr = self.safe_string(market, 'szDecimals')
         amountPrecision = int(amountPrecisionStr)
         price = self.safe_number(market, 'markPx', 0)
-        pricePrecision = self.calculate_price_precision(price, amountPrecision, 6)
+        pricePrecision = 0
+        if price is not None:
+            pricePrecision = self.calculate_price_precision(price, amountPrecision, 6)
         pricePrecisionStr = self.number_to_string(pricePrecision)
         isDelisted = self.safe_bool(market, 'isDelisted')
         active = True
@@ -1132,7 +1141,7 @@ class hyperliquid(Exchange, ImplicitAPI):
             self.safe_number(ohlcv, 'v'),
         ]
 
-    def fetch_trades(self, symbol: Str = None, since: Int = None, limit: Int = None, params={}):
+    def fetch_trades(self, symbol: Str, since: Int = None, limit: Int = None, params={}):
         """
         get the list of most recent trades for a particular symbol
 
@@ -2701,7 +2710,7 @@ class hyperliquid(Exchange, ImplicitAPI):
         if self.in_array(fromAccount, ['spot', 'swap', 'perp']):
             # handle swap <> spot account transfer
             if not self.in_array(toAccount, ['spot', 'swap', 'perp']):
-                raise NotSupported(self.id + 'transfer() only support spot <> swap transfer')
+                raise NotSupported(self.id + ' transfer() only support spot <> swap transfer')
             strAmount = self.number_to_string(amount)
             vaultAddress = self.format_vault_address(self.safe_string(params, 'vaultAddress'))
             params = self.omit(params, 'vaultAddress')
@@ -2736,7 +2745,7 @@ class hyperliquid(Exchange, ImplicitAPI):
         if code is not None:
             code = code.upper()
             if code != 'USDC':
-                raise NotSupported(self.id + 'transfer() only support USDC')
+                raise NotSupported(self.id + ' transfer() only support USDC')
         payload: dict = {
             'hyperliquidChain': 'Testnet' if isSandboxMode else 'Mainnet',
             'destination': toAccount,
@@ -2799,7 +2808,7 @@ class hyperliquid(Exchange, ImplicitAPI):
         if code is not None:
             code = code.upper()
             if code != 'USDC':
-                raise NotSupported(self.id + 'withdraw() only support USDC')
+                raise NotSupported(self.id + ' withdraw() only support USDC')
         vaultAddress = self.format_vault_address(self.safe_string(params, 'vaultAddress'))
         params = self.omit(params, 'vaultAddress')
         nonce = self.milliseconds()
@@ -3259,6 +3268,7 @@ class hyperliquid(Exchange, ImplicitAPI):
         #         status: 'ok',
         #         response: {type: 'order', data: {statuses: [{error: 'Insufficient margin to place order. asset=4'}]}}
         #     }
+        # {"status":"ok","response":{"type":"order","data":{"statuses":[{"error":"Insufficient margin to place order. asset=84"}]}}}
         #
         status = self.safe_string(response, 'status', '')
         message = None

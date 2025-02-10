@@ -30,6 +30,8 @@ const exchanges = JSON.parse (fs.readFileSync("./exchanges.json", "utf8"));
 const exchangeIds = exchanges.ids;
 const exchangesWsIds = exchanges.ws;
 
+let shouldTranspileTests = true
+
 // let buildPython = true;
 // let buildPHP = true;
 
@@ -103,6 +105,7 @@ class Transpiler {
             [ /\.safeDict2/g, '.safe_dict_2'],
             [ /\.safeList2/g, '.safe_list_2'],
             [ /\.safeIntegerProduct2/g, '.safe_integer_product_2'],
+            [ /\.safeNumberOmitZero/g, '.safe_number_omit_zero'],
             [ /\.fetchOHLCVS/g, '.fetch_ohlcvs'],
             [ /\.fetchOHLCVWs/g, '.fetch_ohlcvws'],
             [ /\.parseOHLCVS/g, '.parse_ohlcvs'],
@@ -809,7 +812,7 @@ class Transpiler {
             'MarginModes': /-> MarginModes:/,
             'MarginModification': /-> MarginModification:/,
             'Market': /(-> Market:|: Market)/,
-            'MarketInterface': /-> MarketInterface:/,
+            // 'MarketInterface': /-> MarketInterface:/,
             'MarketMarginModes': /-> MarketMarginModes:/,
             'MarketType': /: MarketType/,
             'Num': /: (?:List\[)?Num =/,
@@ -830,11 +833,13 @@ class Transpiler {
             'FundingRate': /-> FundingRate:/,
             'OpenInterest': /-> OpenInterest:/,
             'FundingRates': /-> FundingRates:/,
+            'OrderBooks': /-> OrderBooks:/,
             'OpenInterests': /-> OpenInterests:/,
             'Trade': /-> (?:List\[)?Trade/,
             'TradingFeeInterface': /-> TradingFeeInterface:/,
             'TradingFees': /-> TradingFees:/,
             'Transaction': /-> (?:List\[)?Transaction/,
+            'MarketInterface': /-> (?:List\[)?MarketInterface/,
             'TransferEntry': /-> TransferEntry:/,
         }
         const matches = []
@@ -2432,7 +2437,8 @@ class Transpiler {
             str = str.replace (/ == True/g, ' is True');
             str = str.replace (/ == False/g, ' is False');
             if (sync) {
-                str = str.replace (/asyncio\.gather\(\*(\[.+\])\)/g, '$1');
+                // str = str.replace (/asyncio\.gather\(\*(\[.+\])\)/g, '$1');
+                str = str.replace (/asyncio\.gather\(\*/g, '(');
             }
             return exchangeCamelCaseProps(str);
         }
@@ -2639,6 +2645,11 @@ class Transpiler {
     // ============================================================================
 
     transpileTests () {
+
+        if (!shouldTranspileTests) {
+            log.bright.yellow ('Skipping tests transpilation');
+            return;
+        }
 
         this.baseFunctionalitiesTests ();
 
@@ -3081,6 +3092,8 @@ if (isMainEntry(import.meta.url)) {
     const force = process.argv.includes ('--force')
     const addJsHeaders = process.argv.includes ('--js-headers')
     const multiprocess = process.argv.includes ('--multiprocess') || process.argv.includes ('--multi')
+
+    shouldTranspileTests = process.argv.includes ('--noTests') ? false : true
 
     const phpOnly = process.argv.includes ('--php');
     if (phpOnly) {

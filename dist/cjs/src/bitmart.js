@@ -509,7 +509,10 @@ class bitmart extends bitmart$1 {
                     '40049': errors.InvalidOrder,
                     '40050': errors.InvalidOrder, // 403, Client OrderId duplicated with existing orders
                 },
-                'broad': {},
+                'broad': {
+                    'You contract account available balance not enough': errors.InsufficientFunds,
+                    'you contract account available balance not enough': errors.InsufficientFunds,
+                },
             },
             'commonCurrencies': {
                 '$GM': 'GOLDMINER',
@@ -723,17 +726,20 @@ class bitmart extends bitmart$1 {
                         'limit': 200,
                         'daysBack': undefined,
                         'untilDays': 99999,
+                        'symbolRequired': false,
                     },
                     'fetchOrder': {
                         'marginMode': false,
                         'trigger': false,
                         'trailing': false,
+                        'symbolRequired': false,
                     },
                     'fetchOpenOrders': {
                         'marginMode': true,
                         'limit': 200,
                         'trigger': false,
                         'trailing': false,
+                        'symbolRequired': false,
                     },
                     'fetchOrders': undefined,
                     'fetchClosedOrders': {
@@ -744,6 +750,7 @@ class bitmart extends bitmart$1 {
                         'untilDays': undefined,
                         'trigger': false,
                         'trailing': false,
+                        'symbolRequired': false,
                     },
                     'fetchOHLCV': {
                         'limit': 1000, // variable timespans for recent endpoint, 200 for historical
@@ -966,7 +973,7 @@ class bitmart extends bitmart$1 {
             const minSellCost = this.safeString(market, 'min_sell_amount');
             const minCost = Precise["default"].stringMax(minBuyCost, minSellCost);
             const baseMinSize = this.safeNumber(market, 'base_min_size');
-            result.push({
+            result.push(this.safeMarketStructure({
                 'id': id,
                 'numericId': numericId,
                 'symbol': symbol,
@@ -1015,7 +1022,7 @@ class bitmart extends bitmart$1 {
                 },
                 'created': undefined,
                 'info': market,
-            });
+            }));
         }
         return result;
     }
@@ -1080,7 +1087,7 @@ class bitmart extends bitmart$1 {
             if (!isFutures && (expiry === 0)) {
                 expiry = undefined;
             }
-            result.push({
+            result.push(this.safeMarketStructure({
                 'id': id,
                 'numericId': undefined,
                 'symbol': symbol,
@@ -1129,7 +1136,7 @@ class bitmart extends bitmart$1 {
                 },
                 'created': this.safeInteger(market, 'open_timestamp'),
                 'info': market,
-            });
+            }));
         }
         return result;
     }
@@ -3600,8 +3607,9 @@ class bitmart extends bitmart$1 {
     async fetchDepositAddress(code, params = {}) {
         await this.loadMarkets();
         const currency = this.currency(code);
+        const currencyId = currency['id'];
         const request = {
-            'currency': currency['id'],
+            'currency': currencyId,
         };
         if (code === 'USDT') {
             const defaultNetworks = this.safeValue(this.options, 'defaultNetworks');
@@ -3610,8 +3618,15 @@ class bitmart extends bitmart$1 {
             let networkInner = this.safeStringUpper(params, 'network', defaultNetwork); // this line allows the user to specify either ERC20 or ETH
             networkInner = this.safeString(networks, networkInner, networkInner); // handle ERC20>ETH alias
             if (networkInner !== undefined) {
-                request['currency'] = request['currency'] + '-' + networkInner; // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
+                request['currency'] = currencyId + '-' + networkInner; // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
                 params = this.omit(params, 'network');
+            }
+        }
+        else {
+            let networkCode = undefined;
+            [networkCode, params] = this.handleNetworkCodeAndParams(params);
+            if (networkCode !== undefined) {
+                request['currency'] = currencyId + '-' + this.networkCodeToId(networkCode);
             }
         }
         const response = await this.privateGetAccountV1DepositAddress(this.extend(request, params));
@@ -3742,7 +3757,7 @@ class bitmart extends bitmart$1 {
             let network = this.safeStringUpper(params, 'network', defaultNetwork); // this line allows the user to specify either ERC20 or ETH
             network = this.safeString(networks, network, network); // handle ERC20>ETH alias
             if (network !== undefined) {
-                request['currency'] += '-' + network; // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
+                request['currency'] = request['currency'] + '-' + network; // when network the currency need to be changed to currency + '-' + network https://developer-pro.bitmart.com/en/account/withdraw_apply.html on the end of page
                 currency['code'] = request['currency']; // update currency code to filter
                 params = this.omit(params, 'network');
             }
@@ -4626,7 +4641,7 @@ class bitmart extends bitmart$1 {
      * @description fetches historical funding rate prices
      * @see https://developer-pro.bitmart.com/en/futuresv2/#get-funding-rate-history
      * @param {string} symbol unified symbol of the market to fetch the funding rate history for
-     * @param {int} [since] timestamp in ms of the earliest funding rate to fetch
+     * @param {int} [since] not sent to exchange api, exchange api always returns the most recent data, only used to filter exchange response
      * @param {int} [limit] the maximum amount of funding rate structures to fetch
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object[]} a list of [funding rate structures]{@link https://docs.ccxt.com/#/?id=funding-rate-history-structure}
@@ -5354,6 +5369,7 @@ class bitmart extends bitmart$1 {
         //     {"message":"Bad Request [from is empty]","code":50000,"trace":"579986f7-c93a-4559-926b-06ba9fa79d76","data":{}}
         //     {"message":"Kline size over 500","code":50004,"trace":"d625caa8-e8ca-4bd2-b77c-958776965819","data":{}}
         //     {"message":"Balance not enough","code":50020,"trace":"7c709d6a-3292-462c-98c5-32362540aeef","data":{}}
+        //     {"code":40012,"message":"You contract account available balance not enough.","trace":"..."}
         //
         // contract
         //
@@ -5365,10 +5381,10 @@ class bitmart extends bitmart$1 {
         const isErrorCode = (errorCode !== undefined) && (errorCode !== '1000');
         if (isErrorCode || isErrorMessage) {
             const feedback = this.id + ' ' + body;
-            this.throwExactlyMatchedException(this.exceptions['exact'], errorCode, feedback);
-            this.throwBroadlyMatchedException(this.exceptions['broad'], errorCode, feedback);
             this.throwExactlyMatchedException(this.exceptions['exact'], message, feedback);
             this.throwBroadlyMatchedException(this.exceptions['broad'], message, feedback);
+            this.throwExactlyMatchedException(this.exceptions['exact'], errorCode, feedback);
+            this.throwBroadlyMatchedException(this.exceptions['broad'], errorCode, feedback);
             throw new errors.ExchangeError(feedback); // unknown message
         }
         return undefined;
