@@ -270,9 +270,6 @@
             },
             "fetchOHLCV": "https://github.com/ccxt/ccxt/pull/21356#issuecomment-1969565862",
             "watchOHLCV": "same as above, needs key fix",
-            "fetchCurrencies": {
-                "type": "todo"
-            },
             "ticker": {
                 "average": "https://app.travis-ci.com/github/ccxt/ccxt/builds/269484317#L4030",
                 "open": "https://app.travis-ci.com/github/ccxt/ccxt/builds/269367056#L3473",
@@ -766,14 +763,15 @@
             },
             "loadMarkets": {
                 "active":"not provided",
-                "precision": "not provided",
                 "limits": "not provided"
             },
-            "fetchOrderBook": "best ask is not always greater than best bid",
+            "fetchOrderBook": {
+                "compareBidAsk": "sometimes bid is greater than ask"
+            },
             "fetchTrades": {
                 "price": "sometimes is not set",
-                "amount": "same",
-                "cost": "same"
+                "cost": "same",
+                "amount": "sometimes not present, only cost present sometimes"
             }
         }
     },
