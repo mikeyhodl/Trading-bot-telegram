@@ -80,6 +80,7 @@ class bitmex extends Exchange {
                 'fetchMyLiquidations' => false,
                 'fetchMyTrades' => true,
                 'fetchOHLCV' => true,
+                'fetchOpenInterests' => true,
                 'fetchOpenOrders' => true,
                 'fetchOrder' => true,
                 'fetchOrderBook' => true,
@@ -3048,6 +3049,74 @@ class bitmex extends Exchange {
             //
             return $this->parse_deposit_withdraw_fees($assets, $codes, 'asset');
         }) ();
+    }
+
+    public function fetch_open_interests(?array $symbols = null, $params = array ()) {
+        return Async\async(function () use ($symbols, $params) {
+            /**
+             * Retrieves the open interest for a list of $symbols
+             *
+             * @see https://docs.bitmex.com/api-explorer/get-stats
+             *
+             * @param {string[]} [$symbols] a list of unified CCXT market $symbols
+             * @param {array} [$params] exchange specific parameters
+             * @return {array[]} a list of ~@link https://docs.ccxt.com/?id=open-interest-structure open interest structures~
+             */
+            Async\await($this->load_markets());
+            $request = array();
+            $response = null;
+            $response = Async\await($this->publicGetStats ($this->extend($request, $params)));
+            //
+            //    array(
+            //        {
+            //            currency => 'XBt',
+            //            openInterest => '0',
+            //            openValue => '323890820079',
+            //            rootSymbol => 'Total',
+            //            turnover24h => '447088001322',
+            //            volume24h => '0'
+            //        }
+            //        ...
+            //    )
+            //
+            $symbols = $this->market_symbols($symbols);
+            return $this->parse_open_interests($response, $symbols);
+        }) ();
+    }
+
+    public function parse_open_interest($interest, ?array $market = null) {
+        //
+        // fetchOpenInterest
+        //
+        //    {
+        //        currency => 'XBt',
+        //        $openInterest => '0',
+        //        $openValue => '323890820079',
+        //        rootSymbol => 'Total',
+        //        turnover24h => '447088001322',
+        //        volume24h => '0'
+        //    }
+        //
+        $quoteId = $this->safe_string($interest, 'currency');
+        $baseId = $this->safe_string($interest, 'rootSymbol');
+        $quoteSymbol = $this->safe_currency_code($quoteId);
+        $baseSymbol = $this->safe_currency_code($baseId);
+        $symbol = $baseSymbol;
+        if ($quoteSymbol !== null) {
+            $symbol = $baseSymbol . '/' . $quoteSymbol . ':' . $quoteSymbol;
+        }
+        $openInterest = $this->safe_number($interest, 'openInterest');
+        $openValue = $this->safe_number($interest, 'openValue');
+        return $this->safe_open_interest(array(
+            'info' => $interest,
+            'symbol' => $symbol,
+            'baseVolume' => $openInterest,  // deprecated
+            'quoteVolume' => $openValue,  // deprecated
+            'openInterestAmount' => $openInterest,
+            'openInterestValue' => $openValue,
+            'timestamp' => null,
+            'datetime' => null,
+        ), $market);
     }
 
     public function calculate_rate_limiter_cost($api, $method, $path, $params, $config = array ()) {
