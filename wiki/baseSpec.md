@@ -4080,6 +4080,7 @@ Retrieves the open interest for a list of symbols
 
 ##### Supported exchanges
 * [bitfinex](/exchanges/bitfinex.md#fetchopeninterests)
+* [bitmex](/exchanges/bitmex.md#fetchopeninterests)
 * [hitbtc](/exchanges/hitbtc.md#fetchopeninterests)
 * [htx](/exchanges/htx.md#fetchopeninterests)
 * [hyperliquid](/exchanges/hyperliquid.md#fetchopeninterests)
