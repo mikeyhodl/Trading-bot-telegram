@@ -85,6 +85,7 @@ class bitmex(Exchange, ImplicitAPI):
                 'fetchMyLiquidations': False,
                 'fetchMyTrades': True,
                 'fetchOHLCV': True,
+                'fetchOpenInterests': True,
                 'fetchOpenOrders': True,
                 'fetchOrder': True,
                 'fetchOrderBook': True,
@@ -2829,6 +2830,69 @@ class bitmex(Exchange, ImplicitAPI):
         #    ]
         #
         return self.parse_deposit_withdraw_fees(assets, codes, 'asset')
+
+    async def fetch_open_interests(self, symbols: Strings = None, params={}):
+        """
+        Retrieves the open interest for a list of symbols
+
+        https://docs.bitmex.com/api-explorer/get-stats
+
+        :param str[] [symbols]: a list of unified CCXT market symbols
+        :param dict [params]: exchange specific parameters
+        :returns dict[]: a list of `open interest structures <https://docs.ccxt.com/?id=open-interest-structure>`
+        """
+        await self.load_markets()
+        request: dict = {}
+        response = None
+        response = await self.publicGetStats(self.extend(request, params))
+        #
+        #    [
+        #        {
+        #            currency: 'XBt',
+        #            openInterest: '0',
+        #            openValue: '323890820079',
+        #            rootSymbol: 'Total',
+        #            turnover24h: '447088001322',
+        #            volume24h: '0'
+        #        }
+        #        ...
+        #    ]
+        #
+        symbols = self.market_symbols(symbols)
+        return self.parse_open_interests(response, symbols)
+
+    def parse_open_interest(self, interest, market: Market = None):
+        #
+        # fetchOpenInterest
+        #
+        #    {
+        #        currency: 'XBt',
+        #        openInterest: '0',
+        #        openValue: '323890820079',
+        #        rootSymbol: 'Total',
+        #        turnover24h: '447088001322',
+        #        volume24h: '0'
+        #    }
+        #
+        quoteId = self.safe_string(interest, 'currency')
+        baseId = self.safe_string(interest, 'rootSymbol')
+        quoteSymbol = self.safe_currency_code(quoteId)
+        baseSymbol = self.safe_currency_code(baseId)
+        symbol = baseSymbol
+        if quoteSymbol is not None:
+            symbol = baseSymbol + '/' + quoteSymbol + ':' + quoteSymbol
+        openInterest = self.safe_number(interest, 'openInterest')
+        openValue = self.safe_number(interest, 'openValue')
+        return self.safe_open_interest({
+            'info': interest,
+            'symbol': symbol,
+            'baseVolume': openInterest,  # deprecated
+            'quoteVolume': openValue,  # deprecated
+            'openInterestAmount': openInterest,
+            'openInterestValue': openValue,
+            'timestamp': None,
+            'datetime': None,
+        }, market)
 
     def calculate_rate_limiter_cost(self, api, method, path, params, config={}):
         isAuthenticated = self.check_required_credentials(False)
