@@ -62,6 +62,7 @@ public partial class bitmex : Exchange
                 { "fetchMyLiquidations", false },
                 { "fetchMyTrades", true },
                 { "fetchOHLCV", true },
+                { "fetchOpenInterests", true },
                 { "fetchOpenOrders", true },
                 { "fetchOrder", true },
                 { "fetchOrderBook", true },
@@ -3188,6 +3189,76 @@ public partial class bitmex : Exchange
         //    ]
         //
         return this.parseDepositWithdrawFees(assets, codes, "asset");
+    }
+
+    /**
+     * @method
+     * @name bitmex#fetchOpenInterests
+     * @description Retrieves the open interest for a list of symbols
+     * @see https://docs.bitmex.com/api-explorer/get-stats
+     * @param {string[]} [symbols] a list of unified CCXT market symbols
+     * @param {object} [params] exchange specific parameters
+     * @returns {object[]} a list of [open interest structures]{@link https://docs.ccxt.com/?id=open-interest-structure}
+     */
+    public async override Task<object> fetchOpenInterests(object symbols = null, object parameters = null)
+    {
+        parameters ??= new Dictionary<string, object>();
+        await this.loadMarkets();
+        object request = new Dictionary<string, object>() {};
+        object response = null;
+        response = await this.publicGetStats(this.extend(request, parameters));
+        //
+        //    [
+        //        {
+        //            currency: 'XBt',
+        //            openInterest: '0',
+        //            openValue: '323890820079',
+        //            rootSymbol: 'Total',
+        //            turnover24h: '447088001322',
+        //            volume24h: '0'
+        //        }
+        //        ...
+        //    ]
+        //
+        symbols = this.marketSymbols(symbols);
+        return this.parseOpenInterests(response, symbols);
+    }
+
+    public override object parseOpenInterest(object interest, object market = null)
+    {
+        //
+        // fetchOpenInterest
+        //
+        //    {
+        //        currency: 'XBt',
+        //        openInterest: '0',
+        //        openValue: '323890820079',
+        //        rootSymbol: 'Total',
+        //        turnover24h: '447088001322',
+        //        volume24h: '0'
+        //    }
+        //
+        object quoteId = this.safeString(interest, "currency");
+        object baseId = this.safeString(interest, "rootSymbol");
+        object quoteSymbol = this.safeCurrencyCode(quoteId);
+        object baseSymbol = this.safeCurrencyCode(baseId);
+        object symbol = baseSymbol;
+        if (isTrue(!isEqual(quoteSymbol, null)))
+        {
+            symbol = add(add(add(add(baseSymbol, "/"), quoteSymbol), ":"), quoteSymbol);
+        }
+        object openInterest = this.safeNumber(interest, "openInterest");
+        object openValue = this.safeNumber(interest, "openValue");
+        return this.safeOpenInterest(new Dictionary<string, object>() {
+            { "info", interest },
+            { "symbol", symbol },
+            { "baseVolume", openInterest },
+            { "quoteVolume", openValue },
+            { "openInterestAmount", openInterest },
+            { "openInterestValue", openValue },
+            { "timestamp", null },
+            { "datetime", null },
+        }, market);
     }
 
     public override object calculateRateLimiterCost(object api, object method, object path, object parameters, object config = null)
